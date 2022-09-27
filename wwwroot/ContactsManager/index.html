@@ -1,0 +1,410 @@
+<!--
+
+    Démonstration d'une page web cliente du service Web API Contacts
+    Cette page offre les opérations CRUD sur une liste de contacts conservée dans une base de données du serveur.
+
+    C - Create - POST
+    R - Read   - GET
+    U - Update - PUT
+    D - Delete - DELETE
+
+    Code de la page : Nicolas Chourot
+    Service Web API : Nicolas Chourot
+
+    Date de mise à jour: septembre 2022
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta author="Nicolas Chourot">
+        <meta http-equiv="Content-Type" content="text/html; charset= ISO-8859-1">
+        <title>Gestion de contacts</title>
+
+        <!-- Latest compiled and minified CSS -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+
+        <!-- Style pour les infobulles -->
+        <link rel="stylesheet" href="css/tooltip.css">
+
+        <!-- Style pour l'interface et la liste des contacts -->
+        <link rel="stylesheet" href="css/contactManagerLayout.css">
+
+        <!-- pour la dialogue de confirmation de retrait d'un contact -->
+        <link rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.css">
+
+        <!-- lien vers le favicon généré par https://favicon.io/favicon-converter/ -->
+        <link rel="icon" href="favicon.ico">
+
+    </head>
+
+    <body>
+        <!-- Entête de la liste de contact -->
+        <div class="container">
+            <div class="appHeader">
+                <h1><img src="favicon.ico">&nbsp;Gestionnaire de contacts</h1>
+            </div>
+
+            <div class="array-container">
+                <div class="header-container">
+                    <div class="header-contacts-container">
+                        <div>Nom</div>
+                        <div>Téléphone</div>
+                        <div>Courriel</div>
+                        <div>
+                            <button id="showAddContactFormCmd" tooltip="Ajouter un contact" tooltip-position="left">
+                                <span class="glyphicon glyphicon-plus"></span>
+                            </button>
+                        </div>
+                        <div>&nbsp;</div>
+                    </div>
+                </div>
+                <div class="form-container">
+                    <div class="form-contact-container" id="contactForm">
+                        <!--
+                        Formulaire de saisie/modification de contact:
+                        Contient les contrôles de saisie de contact.
+                        Notez qu'il sera masqué et n'apparaitra que dans le mode d'ajout ou modification
+                        de contact.
+                        -->
+                        <!-- champ masqué qui recevra le id d'un contact à modifier -->
+                        <input type="hidden" id="Id" />
+                        <div>
+                            <input type="text" id="Name" placeholder="Nom" class="form-control" />
+                        </div>
+                        <div>
+                            <input type="text" id="Phone" placeholder="Téléphone" class="phone form-control" />
+                        </div>
+                        <div>
+                            <input type="text" id="Email" placeholder="Courriel" class="form-control" />
+                        </div>
+                        <div>
+                            <!-- Noter que un seul des boutons suivants sera affiché selon le mode d'ajout ou de modification -->
+                            <!-- bouton de commande d'ajout de contact -->
+                            <button id="addContactCmd" tooltip="Ajouter" tooltip-position="left">
+                                <span class="glyphicon glyphicon glyphicon-ok"></span>
+                            </button>
+                            <!-- bouton de commande de modification de contact -->
+                            <button id="modifyContactCmd" tooltip="Modifier" tooltip-position="left">
+                                <span class="glyphicon glyphicon-ok"></span>
+                            </button>
+                        </div>
+                        <div>
+                            <!-- bouton de commande d'annulation d'ajout ou de modification de contact -->
+                            <button id="cancelCmd" tooltip="Annuler" tooltip-position="left">
+                                <span class="glyphicon glyphicon-repeat"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="contact-list-scroll-containter">
+                    <div class="contact-list-container" id="contactList">
+                        <!-- La liste de contacts sera injectée ici par 
+                             la fonction JavaScript updateContactList(...) -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fichier local qui contient la librairie jQuery -->
+        <script src="js/jquery-3.3.1.js"></script>
+        <!-- Fichier local qui contient la librairie de Validation -->
+        <script src="js/Validation.js"></script>
+        <!-- Fichier local qui contient les fonctions de requête au service Web API -->
+        <script src="js/contactManagerWebAPIRequest.js"></script>
+        <!-- Fichier local qui contient la librairie de dialogue de confirmation -->
+        <script src="js/jquery-confirm.js"></script>
+        <!-- Fichier local qui contient la librairie de gestion de champ masqué -->
+        <script src="js/jquery.maskedinput.js"></script>
+
+        <script defer>
+            "use strict";
+
+            $(document).ready(initUI);
+
+            let editMode = false;
+            let addMode = false;
+
+            // objet d'automatisation de la validation
+            let validationProvider;
+
+            // Initialisation de l'interface
+            function initUI() {
+                initValidation();
+                eraseForm();
+
+                // Gestionnaires du clic sur les boutons
+                $('#addContactCmd').click(addContact);
+                $('#showAddContactFormCmd').click(showAddContactForm);
+                $('#modifyContactCmd').click(modifyContact);
+                $('#cancelCmd').click(eraseForm);
+                $('#Name').keypress(textInputAlphaFilter);
+
+                // Ajout d'un message d'attente de réponse du serveur.
+                // Cela peut prendre quelques secondes avant que le serveur Web
+                // redémarre après une longue période sans requête
+                insertWaitingStatus();
+                // Extraire la liste des contacts via le service web API
+                // et mettre à jour le tableau qui présente la liste de contacts
+                getContacts();
+            }
+
+            function insertWaitingStatus() {
+                $('#contactList').empty();
+                $('#contactList').append(makeTextCell("En attente de réponse du service Web...", "waiting"));
+                $('#contactList').append($('<img src="images/Loading_icon.gif" alt="waiting"/>'));
+            }
+
+            function insertErrorStatus(status) {
+                console.log("status:", status);
+                $('#contactList').empty()
+                $('#contactList').append($('<img src="images/error.png" style="width:60px;margin:10px" alt="httpError" onclick="location.reload()" title="Recharcher la page"/>'));
+                $('#contactList').append(makeTextCell("Erreur de requête au service Web...", "httpError"));
+                $('#contactList').append(makeTextCell(status, "httpError"));
+            }
+
+            function initValidation() {
+                $(".phone").mask("(999) 999-9999");
+                validationProvider = new ValidationProvider();
+                validationProvider.addControl("Name", validate_Name);
+                validationProvider.addControl("Phone", validate_Phone);
+                validationProvider.addControl("Email", validate_email);
+            }
+
+            function resetValidation() {
+                validationProvider.reset();
+            }
+
+            function validate_Name() {
+                let TBX_FirstName = document.getElementById("Name");
+
+                if (TBX_FirstName.value === "")
+                    return "Nom manquant";
+
+                return "";
+            }
+
+            function validate_Phone() {
+                let TBX_LastName = document.getElementById("Phone");
+
+                if (TBX_LastName.value === "")
+                    return "Téléphone manquant";
+
+                return "";
+            }
+
+            function validate_email() {
+                let TBX_Email = document.getElementById("Email");
+                let emailRegex = /^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3})+)$/;
+
+                if (TBX_Email.value === "")
+                    return "Adresse de courriel manquante";
+
+                if (!emailRegex.test(TBX_Email.value))
+                    return "Adresse de courriel invalide";
+
+                return "";
+            }
+
+            // Effacer les contrôles de saisie/modification d'un contact
+            // et rétablir la visibilité des boutons
+            function eraseForm() {
+                addMode = false;
+                editMode = false;
+                resetValidation();
+
+                // rétablir la couleur de fond de toutes les rangées
+                $('.cell').removeClass('selectedRow');
+
+                // masquer le formulaire de saisie/modification de contact
+                $('#contactForm').hide(400);
+
+                // Rétablir la visibilité par défaut des boutons
+                $('#addContactCmd').show();
+                $('#modifyContactCmd').hide();
+                $('#showAddContactFormCmd').show();
+
+                // Effacer les champs du formulaire
+                $('#Name').val('');
+                $('#Phone').val('');
+                $('#Email').val('');
+
+                // Masquer tous les boutons des rangées de contact
+                $('#contactList button').hide();
+
+            }
+
+            // Requête au service web API: Liste des contacts
+            function getContacts() {
+                webAPI_getContacts(updateContactList, insertErrorStatus);
+            }
+
+            // Afficher le formulaire pour la saisie de contact
+            function showAddContactForm() {
+                addMode = true;
+                $('#addContactCmd').show();
+                $('#contactForm').show(400);
+                $('#showAddContactFormCmd').hide();
+            }
+
+            // Afficher le formulaire pour la modification de contact
+            function showEditContactForm(e) {
+                editMode = true;
+                $('#addContactCmd').hide();
+                $('#showAddContactFormCmd').hide();
+                $('#contactForm').show(400);
+
+                let contactId = e.currentTarget.id.split('_')[1];
+
+                // Extraction du contact de Id = contactId via le service web API
+                webAPI_getContact(contactId, setFormData);
+            }
+
+            function setFormData(contact) {
+                // peupler les contrôles de saisie
+                $('#Id').val(contact.Id); // input caché qui mémorise le Id du contact
+                $('#Name').val(contact.Name);
+                $('#Phone').val(contact.Phone);
+                $('#Email').val(contact.Email);
+                $('#modifyContactCmd').show();
+            }
+
+            // Retourne un objet contact à partir des valeurs prélevées se trouvant dans les contrôles de saisie.
+            // Si le paramètre includeId est vrai, inclure le Id du contact dans l'objet contact retourné
+            function makeContactFromForm(includeId = false) {
+                if (includeId) {
+                    // Récupération du Id du contact dans le contrôle caché
+                    let contactId = parseInt($('#Id').val());
+                    return { Id: contactId, Name: $('#Name').val(), Phone: $('#Phone').val(), Email: $('#Email').val() };
+                }
+                return { Id: 0, Name: $('#Name').val(), Phone: $('#Phone').val(), Email: $('#Email').val() };
+            }
+
+            // Ajout d'un contact
+            function addContact() {
+                let contact = makeContactFromForm();
+                if (validationProvider.isValid()) {
+                    webAPI_addContact(contact, getContacts, insertErrorStatus);
+                }
+            }
+
+            // Requête au service Web API: Modification d'un contact
+            function modifyContact() {
+                // construction de l'objet contact
+                let contact = makeContactFromForm(true);
+                if (validationProvider.isValid()) {
+                    webAPI_modifyContact(contact, getContacts, insertErrorStatus);
+                }
+            }
+
+            // Après confirmation, requête au service Web API de retrait d'un contact
+            function deleteContact(e) {
+                // Extraction du Id du contact inscrit dans l'attribut id de l'élément déclencheur de l'événement click
+                let contactId = parseInt(e.currentTarget.id.split('_')[1]);
+                webAPI_getContact(contactId, confirmDeleteContact, insertErrorStatus);
+            }
+
+            function confirmDeleteContact(contact) {
+                $.confirm({
+                    title: 'Attention!',
+                    content: 'Effacer ' + contact.Name + '?',
+                    buttons: {
+                        confirmer: function () {
+                            webAPI_deleteContact(contact.Id, getContacts, insertErrorStatus);
+                        },
+                        annuler: {},
+                    }
+                });
+            }
+
+            // Sur le survol d'une rangée, faire apparaître les boutons edit et delete
+            function cellOver(e) {
+                if (!addMode && !editMode) {
+                    // currentTarget.className contient en principe : 'row_x cell ...'
+                    let contactId = e.currentTarget.className.split(' ')[0].split('_')[1];
+                    $('#edit_' + contactId).show();
+                    $('#delete_' + contactId).show();
+                    $('.row_' + contactId).addClass('selectedRow');
+                }
+            }
+
+            // Sur le l'évacuation d'une rangée, faire disparaître les boutons edit et delete
+            function cellBlur(e) {
+                if (!editMode) {
+                    // currentTarget.className contient en principe : 'row_x cell ...'
+                    let contactId = e.currentTarget.className.split(' ')[0].split('_')[1];
+                    $('#edit_' + contactId).hide();
+                    $('#delete_' + contactId).hide();
+                    $('.row_' + contactId).removeClass('selectedRow');
+                }
+            }
+
+            function makeTextCell(content, cssClass) {
+                return $('<div class= "' + cssClass + '">' + content + '</div>');
+            }
+
+            function makeCell(cssClass) {
+                return $('<div class= "' + cssClass + '"></div>');
+            }
+
+            function makeButton(cssClass, id, tooltip) {
+                return $('<button id="' + id + '" class="' + cssClass + '"tooltip="' + tooltip + '" tooltip-position="left"></button>');
+            }
+
+            function makeGlyphIcon(glyphIconId) {
+                return $("<span class='glyphicon glyphicon-" + glyphIconId + "'></span>");
+            }
+
+            // Rafraichir la liste des contacts
+            // paramètre contacts: tableau d'objets contact
+            function updateContactList(contacts) {
+                eraseForm();
+                var oddRow = true;
+                // effacer le tableau affichant la liste de contacts
+                $('#contactList').empty();
+
+                // pour tous les contacts du tableau contacts
+                contacts.forEach(contact => { // créer une nouvelle rangée
+
+                    // déterminer la couleur de la rangée
+                    let bgColorRow = "row_" + contact.Id + (oddRow ? " oddRow" : " evenRow") + " cell ";
+
+                    // Distribution des données du contact dans des cellules de la rangée
+                    $('#contactList').append(makeTextCell(contact.Name, bgColorRow + " ellipsis"));
+                    $('#contactList').append(makeTextCell(contact.Phone, bgColorRow + " ellipsis"));
+                    $('#contactList').append(makeTextCell(contact.Email, bgColorRow + " ellipsis"));
+
+                    // Bouton d'appel à la modification du contact
+                    $('#contactList')
+                        .append(makeCell(bgColorRow)
+                            .append(makeButton("editContactCmd", "edit_" + contact.Id, "Modifier " + contact.Name)
+                                .append(makeGlyphIcon('pencil'))));
+
+                    // Bouton d'appel au retrait du contact
+                    $('#contactList')
+                        .append(makeCell(bgColorRow)
+                            .append(makeButton("deleteContactCmd", "delete_" + contact.Id, "Effacer " + contact.Name)
+                                .append(makeGlyphIcon('remove'))));
+
+                    oddRow = !oddRow;
+                });
+
+                // Attacher les gestionnaires du clic aux nouveaux boutons
+                $('.editContactCmd').click(showEditContactForm);
+                $('.deleteContactCmd').click(deleteContact);
+                $('#contactList button').hide();
+                $('input').on("paste", function (e) { e.preventDefault(); });
+
+                // Attacher les événements pour mettre en surbrillance la rangée survolée
+                // et faire apparaitre les icons d'édition et de retrait
+                $('.cell').mouseover(cellOver);
+                $('.cell').mouseleave(cellBlur);
+            }
+
+        </script>
+    </body>
+
+</html>

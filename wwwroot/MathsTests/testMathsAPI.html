@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta author="Nicolas Chourot">
+        <meta http-equiv="Content-Type" content="text/html; charset= ISO-8859-1">
+        <title>Test Maths API</title>
+
+        <!-- Latest compiled and minified CSS -->
+        <style>
+            body {
+                width: 1200px;
+                margin: auto;
+            }
+
+            input {
+                width: 260px;
+            }
+
+            .container {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: large;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+
+    <body>
+        <!-- Entête de la liste de contact -->
+        <h1>Test du service /api/maths</h1>
+        <fieldset>
+            <legend>
+                <h3>Url du service</h3>
+            </legend>
+            <input type="text" id="serviceHost" value="http://localhost:5000" placeholder="host">
+            <span>/api/maths</span>
+            <button id="LaunchTestCMD">Démarrer le test</button>
+            <button id="serviceHelp">Aide</button>
+        </fieldset>
+        <fieldset>
+            <legend>
+                <h3>Tests</h3>
+            </legend>
+            <div class="container"></div>
+        </fieldset>
+        <fieldset>
+            <legend>
+                <h3>Verdict</h3>
+            </legend>
+            <div id="verdict"></div>
+        </fieldset>
+        <!-- Fichier local qui contient la librairie jQuery -->
+        <script src="js/jquery-3.3.1.js"></script>
+        <!-- Fichier local qui contient la librairie de Validation -->
+        <script src="js/mathsAPIRequest.js"></script>
+        <!-- Fichier local qui contient la librairie de dialogue de confirmation -->
+
+        <script>
+            "use strict";
+
+            let problems = 0;
+
+            $(document).ready(() => {
+                $("#LaunchTestCMD").on('click', () => {
+                    launchTests($("#serviceHost").val().trim());
+                })
+
+                $("#serviceHelp").on('click', () => {
+                    console.log($("#serviceHost").val().trim() + "/api/maths?");
+                    document.location = $("#serviceHost").val().trim() + "/api/maths?";
+                })
+            });
+
+            async function launchTests(host) {
+                problems = 0;
+                $(".container").empty();
+                $("#verdict").text("Test en cours");
+                if (!(await webAPI_getMaths(host, "?op=+&x=-111&y=-244", showResult)))
+                    problems = -1;
+                else {
+                    await webAPI_getMaths(host, "?op=-&x=111&y=244", showResult)
+                    await webAPI_getMaths(host, "?op=*&x=11&y=244", showResult)
+                    await webAPI_getMaths(host, "?op=/&x=99&y=11", showResult)
+                    await webAPI_getMaths(host, "?op=/&x=99&y=0", showResult)
+                    await webAPI_getMaths(host, "?op=/&x=0&y=0", showResult)
+                    await webAPI_getMaths(host, "?op=%&x=100&y=11", showResult)
+                    await webAPI_getMaths(host, "?op=%&x=100&y=0", showResult)
+                    await webAPI_getMaths(host, "?op=%&x=0&y=0", showResult)
+                    await webAPI_getMaths(host, "?op=!&n=5", showResult)
+                    await webAPI_getMaths(host, "?op=p&n=5", showResult)
+                    await webAPI_getMaths(host, "?op=np&n=1", showResult)
+
+                    await webAPI_getMaths(host, "?op=+&X=111&y=244", showResult)
+                    await webAPI_getMaths(host, "?op=+&x=111&Y=244", showResult)
+                    await webAPI_getMaths(host, "?op=+&x=111&y=244&z=0", showResult)
+                    await webAPI_getMaths(host, "?op=!&n=5&z=0", showResult)
+                    await webAPI_getMaths(host, "?z=0", showResult)
+                    await webAPI_getMaths(host, "?op=!&n=-5", showResult)
+                    await webAPI_getMaths(host, "?x", showResult)
+                }
+                if (problems == -1) {
+                    $("#verdict").text("Service introuvable!");
+                } else {
+                    if (problems > 0)
+                        $("#verdict").text(problems + " problèmes");
+                    else
+                        $("#verdict").text("Bravo!!! Aucun problème");
+                }
+            }
+
+            function verify(result) {
+                if (result.op != null) {
+                    switch (result.op) {
+                        case '+':
+                        case '-':
+                        case '*':
+                        case '/':
+                        case '%':
+                            if (Object.keys(result).length != 4)
+                                return (result.error != null);
+                            if (result.x == null)
+                                return (result.error != null);
+                            if (parseInt(result.x) == NaN)
+                                return (result.error != null);
+                            if (result.y == null)
+                                return (result.error != null);
+                            if (parseInt(result.y) == NaN)
+                                return (result.error != null);
+                            break;
+                        case '!':
+                        case 'p':
+                        case 'np':
+                            if (Object.keys(result).length != 3)
+                                return (result.error != null);
+                            if (result.n == null)
+                                return (result.error != null);
+                            if (parseInt(result.n) == NaN)
+                                return (result.error != null);
+                            if (parseInt(result.n) < 0)
+                                return (result.error != null);
+                            break;
+                        default:
+                            return (result.error != null);
+                    }
+
+                    if (result.value == null)
+                        return false;
+                    switch (result.op) {
+                        case '+': return (result.value == parseInt(result.x) + parseInt(result.y));
+                        case '-': return (result.value == parseInt(result.x) - parseInt(result.y));
+                        case '*': return (result.value == parseInt(result.x) * parseInt(result.y));
+                        case '/':
+                            if (result.value == "NaN" && parseInt(result.x) == 0 && parseInt(result.y) == 0)
+                                return true;
+                            return (result.value == parseInt(result.x) / parseInt(result.y));
+                        case '%':
+                            if (result.value == "NaN" && parseInt(result.y) == 0)
+                                return true;
+                            return (result.value == parseInt(result.x) % parseInt(result.y));
+                        case '!': return (result.value == factorial(parseInt(result.n)));
+                        case 'p': return (result.value == isPrime(parseInt(result.n)));
+                        case 'np': return (result.value == findPrime(parseInt(result.n)));
+                        default:
+                            return (result.error != null);
+                    }
+
+                } else {
+                    return (result.error != null)
+                }
+                return true;
+            }
+
+            function showResult(result) {
+                let problem = !verify(result);
+                let status = (!problem ? "OK" : "ERROR");
+                if (problem)
+                    problems++;
+                $(".container").append(status + " ---> " + JSON.stringify(result)).append($("<br>"));
+            }
+            function factorial(n) {
+                if (n === 0 || n === 1) {
+                    return 1;
+                }
+                return n * factorial(n - 1);
+            }
+
+            function isPrime(value) {
+                for (var i = 2; i < value; i++) {
+                    if (value % i === 0) {
+                        return false;
+                    }
+                }
+                return value > 1;
+            }
+
+            function findPrime(n) {
+                let primeNumer = 0;
+                for (let i = 0; i < n; i++) {
+                    primeNumer++;
+                    while (!isPrime(primeNumer)) {
+                        primeNumer++;
+                    }
+                }
+                return primeNumer;
+            }
+        </script>
+    </body>
+
+</html>

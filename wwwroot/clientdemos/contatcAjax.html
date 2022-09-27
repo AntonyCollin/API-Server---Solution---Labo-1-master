@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <form id="contactForm">
+      <input type="hidden" id="Id" name="Id" value="0" />
+      <input type="text" id="Name" name="Name" placeholder="Name" />
+      <input type="text" id="Phone" name="Phone" placeholder="Phone" />
+      <input type="text" id="Email" name="Email" placeholder="Email" />
+      <input type="submit" value="Submit" />
+    </form>
+
+    <script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
+    <script defer>
+      function getContactFormData() {
+        let id = $("#Id").val();
+        let name = $("#Name").val();
+        let phone = $("#Phone").val();
+        let email = $("#Name").val();
+        let contact = { Id: id, Name: name, Phone: phone, Email: email };
+        console.log(contact);
+        return contact;
+      }
+      $("#contactForm").submit((e) => {
+        e.preventDefault();
+        createContact(getContactFormData());
+      });
+      //const API_Service_URL = "http://localhost:5000/api/contacts";
+      const API_Service_URL = "https://api-server-beta.glitch.me/api/contacts";
+      function createContact(
+        contact,
+        successCallBack = null,
+        errorCallBack = null
+      ) {
+        $.ajax({
+          url: API_Service_URL,
+          contentType: "application/json; charset=utf-8",
+          contentType: "application/json",
+          data: JSON.stringify(contact),
+          success: () => {
+            if (successCallBack) successCallBack();
+            console.log("webAPI_addContact - success");
+          },
+          error: function (jqXHR, textStatus, errorThrown) {
+            if (errorCallBack) errorCallBack(errorThrown);
+            console.log("webAPI_addContact - error");
+          },
+        });
+      }
+    </script>
+  </body>
+</html>

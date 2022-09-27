@@ -164,7 +164,7 @@ class Repository {
 
             
                     }
-                } else { // if not sort
+                } else { // if not sortd
                     // todo add search key
                     if (paramName in model)  
                     {
